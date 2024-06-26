@@ -18,7 +18,7 @@ library(leafem)
 library(DT)
 library(ggplot2)
 library(sf)
-library(viridis)
+
 ```
 
 
@@ -35,11 +35,10 @@ Tabla de cantidad de registros de presencia por categoría de Lista Roja
 especies_reptiles <- "especies-reptiles.csv"
 data <- read.csv(especies_reptiles)
 
-
-data_separado <-
 # El excel con los datos de las especies de los reptiles solamente estaba generando una columna con los datos de las species y iucnRedListCategory unidos, por lo que se procedió a separar los datos creando dos columnas diferentes, una para species y otra con iucnRedListCategory para poder realizar el ejercicio.
   
-  
+
+data_separado <-
   data |>
   separate(
     species.iucnRedListCategory,
@@ -48,11 +47,11 @@ data_separado <-
   )
 
 
-
 # Tabla 
-categoria_cantidad <- data_separado %>%
-  group_by(iucnRedListCategory) %>%
-  summarise(cantidad = n()) %>%
+categoria_cantidad <- 
+  data_separado |>
+  group_by(iucnRedListCategory) |>
+  summarise(cantidad = n()) |>
   rename(`Categoria de especies` = iucnRedListCategory)
 
 # Tabla interactiva
