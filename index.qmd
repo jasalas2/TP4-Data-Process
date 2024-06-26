@@ -1,0 +1,244 @@
+---
+title: "Trabajo Práctico #4 G1"
+author: "Jarod Salas (G1) y Kevin Córdoba (G2)"
+format: dashboard
+orientation: columns
+---
+
+```{r}
+#| label: carga-paquetes
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(plotly)
+library(leaflet)
+library(leaflet.extras)
+library(leafem)
+library(DT)
+library(ggplot2)
+library(sf)
+library(viridis)
+```
+
+
+# Parte 1
+
+## Row {height=70%}
+
+Tabla de cantidad de registros de presencia por categoría de Lista Roja
+
+```{r}
+#| label: especies-roja
+
+
+especies_reptiles <- "especies-reptiles.csv"
+data <- read.csv(especies_reptiles)
+
+
+data_separado <-
+# El excel con los datos de las especies de los reptiles solamente estaba generando una columna con los datos de las species y iucnRedListCategory unidos, por lo que se procedió a separar los datos creando dos columnas diferentes, una para species y otra con iucnRedListCategory para poder realizar el ejercicio.
+  
+  
+  data |>
+  separate(
+    species.iucnRedListCategory,
+    into = c("species", "iucnRedListCategory"),
+    sep = ";"
+  )
+
+
+
+# Tabla 
+categoria_cantidad <- data_separado %>%
+  group_by(iucnRedListCategory) %>%
+  summarise(cantidad = n()) %>%
+  rename(`Categoria de especies` = iucnRedListCategory)
+
+# Tabla interactiva
+datatable(categoria_cantidad, 
+          options = list(pageLength = 10, 
+                         autoWidth = TRUE),
+          colnames = c('Categoria de especies', 'Cantidad'))
+```
+
+# Parte 2
+
+## Row {height=70%}
+
+Gráfico de barras de cantidad de registros de presencia de las clases Squamata (lagartos y serpientes), Testudines (tortugas) y Crocodylia (cocodrilos y caimanes)
+
+```{r}
+#| label: carga-datos-reg-repitles
+
+reptiles_registro <-
+  read.delim("registros-reptiles.csv")
+```
+
+```{r}
+#| label: grafico-reptiles-class
+
+grafico_ggplot2 <-
+reptiles_registro |>
+  group_by(class) |>
+  summarize(n = n()) |>
+  ggplot(aes(
+    x = reorder(class, n),
+    y = n
+  )) +
+  geom_col() +
+  coord_flip() +
+  xlab("Clases") +
+  ylab("Cantidad de registros de presencia") +
+  ggtitle("Registros de presencia de las clases Squamata, Testudines, Crocodylia")
+ggplotly(grafico_ggplot2) |> config(locale = "es")  
+
+```
+
+# Parte 3
+
+## Row {height=70%}
+
+Mapa de riqueza de especies de la familia Iguanidae (iguanas y garrobos) en regiones socioeconómicas
+
+```{r}
+#| label: carga-datos-reg-socio
+
+rs_zonas <-
+  st_read("regiones-socioeconomicas.gpkg", quiet = TRUE) |>
+  st_transform(4326)
+  
+```
+
+```{r}
+#| label: carga-datos-reptiles
+#| message: false
+#| warning: false
+
+reptiles_especies <-
+  st_read(
+    "registros-reptiles.csv",
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"   
+    ),
+    quiet = TRUE
+  )
+
+st_crs(reptiles_especies) <- 4326
+```
+
+```{r}
+#| label: filtro-iguanidae
+
+filtro_iguanidae <-
+  reptiles_especies |>
+  filter(family == "Iguanidae")
+```
+
+```{r}
+#| label: union-rs-iguanidae
+
+rs_union_iguanidae <-
+  st_join(filtro_iguanidae, rs_zonas)
+    join = st_within
+    
+```
+
+```{r}
+#| label: familia-iguanidae
+
+conteo_iguanidae <-
+  rs_union_iguanidae |>
+  st_drop_geometry() |>
+  group_by(region) |>
+  filter(!is.na(region)) |>
+  summarise(conteo_iguanidae_rs = n())   
+```
+
+```{r}
+#| label: join-rs-iguana
+
+union_rs_iguana <-
+  left_join(
+    x = rs_zonas,
+    y = dplyr::select(conteo_iguanidae, region, conteo_iguanidae_rs),
+    by = "region"
+  )
+```
+
+```{r}
+#| label: mapa-leaflet
+
+# Paleta de colores   #funciona y falta mapa ESRI
+colores_union_iguanidae <-
+  colorNumeric(
+    palette = "Reds",
+    domain = union_rs_iguana$conteo_iguanidae_rs,
+    na.color = "transparent"
+  )
+
+# Mapa leaflet 2
+leaflet() |>
+  setView(
+    lng = -84,
+    lat = 9,
+    zoom = 7) |>
+  addTiles(group = "Mapa general (Open Street Map)") |>
+  addProviderTiles(provider = providers$Esri.WorldImagery, group = "Imágenes satelitales (Esri World Imagery)") |>
+  addPolygons(
+    data = union_rs_iguana,
+    fillColor = ~ colores_union_iguanidae(union_rs_iguana$conteo_iguanidae_rs),
+    fillOpacity = 0.8,
+    color = "black",
+    stroke = TRUE,
+    weight = 1.0,
+    popup = paste(
+      paste("<strong>Región socioeconómica:</strong>", union_rs_iguana$region),
+      paste("<strong>Riqueza de especies de Iguanidae:</strong>", union_rs_iguana$conteo_iguanidae_rs),
+      sep = '<br/>'
+    ),
+    group = "Riqueza especies Iguanidae"
+  ) |>
+  addLegend(
+    position = "bottomleft",
+    pal = colores_union_iguanidae,
+    values = union_rs_iguana$conteo_iguanidae_rs,
+    group = "Riqueza especies Iguanidae",
+    title = "Cantidad de Iguanidae"
+  ) |>
+  addLayersControl(
+    baseGroups = c("Open Street Map", "Imágenes satelitales (Esri World Imagery)"),
+    overlayGroups = c("Riqueza especies Iguanidae")
+  ) |>
+  addResetMapButton() |>
+  addSearchOSM() |>
+  addMouseCoordinates() |>
+  addMiniMap(position = "bottomright") |>
+  addFullscreenControl()
+```
+
+# Parte 4
+
+## Row {height=70%}
+
+Gráfico de barras de riqueza de especies de la familia Iguanidae en regiones socioeconómicas
+
+```{r}
+#| label: grafico-iguanidae
+
+
+grafico_barras_ggplot2 <-
+
+conteo_iguanidae |>
+  ggplot(aes(x = reorder (region, conteo_iguanidae_rs), y = conteo_iguanidae_rs)) +
+  geom_col() +
+  coord_flip() +
+  ggtitle("Riqueza de especies de la familia Iguanidae en regiones socioeconómicas") +
+  xlab("Región socioeconómica") +
+  ylab("Riqueza de especies")
+
+ggplotly(grafico_barras_ggplot2) |>
+  config(locale = "es")
+```
+
