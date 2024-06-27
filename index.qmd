@@ -141,7 +141,7 @@ conteo_iguanidae <-
   st_drop_geometry() |>
   group_by(region) |>
   filter(!is.na(region)) |>
-  summarise(conteo_iguanidae_rs = n())   
+  summarise(conteo_iguanidae_rs = n_distinct(na.rm = TRUE))  
 ```
 
 ```{r}
